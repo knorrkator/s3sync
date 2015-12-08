@@ -26,9 +26,9 @@ var wg sync.WaitGroup
 // First parameter is an *s3.S3 Object (http://docs.aws.amazon.com/sdk-for-go/api/service/s3/S3.html)
 // Second is the S3-Bucket-Name (Note not the S3-Path like s3://bucket_name)
 // Third is the result channel of type *s3.ListObjectsOutput
-func list_elements(svc *s3.S3, bucket_name string, result_chan chan *s3.ListObjectsOutput) {
+func list_elements(svc *s3.S3, bucket_name string, chan_s3_chunks chan *s3.ListObjectsOutput) {
   defer wg.Done()
-  defer close(result_chan)
+  defer close(chan_s3_chunks)
 
   params := &s3.ListObjectsInput{
     Bucket:       aws.String(bucket_name), // Required
@@ -36,7 +36,7 @@ func list_elements(svc *s3.S3, bucket_name string, result_chan chan *s3.ListObje
   }
 
   err := svc.ListObjectsPages(params, func(page *s3.ListObjectsOutput, lastPage bool) bool {
-    result_chan <- page
+    chan_s3_chunks <- page
     return !lastPage
   })
 
@@ -51,10 +51,10 @@ func list_elements(svc *s3.S3, bucket_name string, result_chan chan *s3.ListObje
 }
 
 // Need to convert Chungs of Keys, returned from S3-API into lists
-func extract_contents(result_chan chan *s3.ListObjectsOutput, output_chan chan *s3.Object) {
+func extract_contents(chan_s3_chunks chan *s3.ListObjectsOutput, output_chan chan *s3.Object) {
   defer wg.Done()
   for {
-    s3_list_chunk, ok := <- result_chan
+    s3_list_chunk, ok := <- chan_s3_chunks
     if !ok {
       // Channel is closed bei producer
       break
@@ -128,15 +128,15 @@ func main() {
 
     wg.Add(5)
 
-    result_chan_src := make(chan *s3.ListObjectsOutput, CHAN_BUFFER_SIZE)
-    result_chan_dest := make(chan *s3.ListObjectsOutput, CHAN_BUFFER_SIZE)
+    chan_s3_chunks_src := make(chan *s3.ListObjectsOutput, CHAN_BUFFER_SIZE)
+    chan_s3_chunks_dest := make(chan *s3.ListObjectsOutput, CHAN_BUFFER_SIZE)
     s3_contents_src := make(chan *s3.Object, CHAN_BUFFER_SIZE)
     s3_contents_dest := make(chan *s3.Object, CHAN_BUFFER_SIZE)
 
-    go list_elements(svc, "knorrtestx1", result_chan_src)
-    go list_elements(svc, "knorrtestx2", result_chan_dest)
-    go extract_contents(result_chan_src, s3_contents_src)
-    go extract_contents(result_chan_dest, s3_contents_dest)
+    go list_elements(svc, "knorrtestx1", chan_s3_chunks_src)
+    go list_elements(svc, "knorrtestx2", chan_s3_chunks_dest)
+    go extract_contents(chan_s3_chunks_src, s3_contents_src)
+    go extract_contents(chan_s3_chunks_dest, s3_contents_dest)
     go find_missing(s3_contents_src, s3_contents_dest)
 
     wg.Wait()
