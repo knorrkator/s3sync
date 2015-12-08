@@ -26,7 +26,7 @@ var wg sync.WaitGroup
 // First parameter is an *s3.S3 Object (http://docs.aws.amazon.com/sdk-for-go/api/service/s3/S3.html)
 // Second is the S3-Bucket-Name (Note not the S3-Path like s3://bucket_name)
 // Third is the result channel of type *s3.ListObjectsOutput
-func list_elements(svc *s3.S3, bucket_name string, chan_s3_chunks chan *s3.ListObjectsOutput) {
+func receive_s3_chunks(svc *s3.S3, bucket_name string, chan_s3_chunks chan *s3.ListObjectsOutput) {
   defer wg.Done()
   defer close(chan_s3_chunks)
 
@@ -71,7 +71,7 @@ func extract_contents(chan_s3_chunks chan *s3.ListObjectsOutput, output_chan cha
 }
 
 // Detects difference between Source- and Destination-Bucket
-func find_missing(s3_contents_src, s3_contents_dest chan *s3.Object) {
+func calculate_diff(s3_contents_src, s3_contents_dest chan *s3.Object) {
   defer wg.Done()
   var src, dest *s3.Object
 
@@ -133,11 +133,11 @@ func main() {
     s3_contents_src := make(chan *s3.Object, CHAN_BUFFER_SIZE)
     s3_contents_dest := make(chan *s3.Object, CHAN_BUFFER_SIZE)
 
-    go list_elements(svc, "knorrtestx1", chan_s3_chunks_src)
-    go list_elements(svc, "knorrtestx2", chan_s3_chunks_dest)
+    go receive_s3_chunks(svc, "knorrtestx1", chan_s3_chunks_src)
+    go receive_s3_chunks(svc, "knorrtestx2", chan_s3_chunks_dest)
     go extract_contents(chan_s3_chunks_src, s3_contents_src)
     go extract_contents(chan_s3_chunks_dest, s3_contents_dest)
-    go find_missing(s3_contents_src, s3_contents_dest)
+    go calculate_diff(s3_contents_src, s3_contents_dest)
 
     wg.Wait()
 
