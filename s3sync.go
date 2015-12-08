@@ -133,10 +133,17 @@ func main() {
     s3_contents_src := make(chan *s3.Object, CHAN_BUFFER_SIZE)
     s3_contents_dest := make(chan *s3.Object, CHAN_BUFFER_SIZE)
 
+    // Task 1: Read Chunks from S3-Buckets.
+    // Chunks are a bunch of S3-Keys that the Bucket contains. A S3-Bucket retuns
+    // a maximum of 1.000 keys per Chunk. Both Buckets are read asyncroneuous.
     go receive_s3_chunks(svc, "knorrtestx1", chan_s3_chunks_src)
     go receive_s3_chunks(svc, "knorrtestx2", chan_s3_chunks_dest)
+    // When the first Chunks arrive we extract their keys and write them into a list.
+    // Both Buckets have their own list of S3-Keys
     go extract_contents(chan_s3_chunks_src, s3_contents_src)
     go extract_contents(chan_s3_chunks_dest, s3_contents_dest)
+    // When the first elements arrive in the list of S3-Keys we calculate the difference
+    // between both Bucket. This job starts as soon as there are elements in one of the lists
     go calculate_diff(s3_contents_src, s3_contents_dest)
 
     wg.Wait()
