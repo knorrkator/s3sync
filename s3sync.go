@@ -68,10 +68,9 @@ func extract_contents(chan_s3_chunks chan *s3.ListObjectsOutput, output_chan cha
       //fmt.Printf("Key: %v\n", s3_key)
       output_chan <- s3_key
     }
-
-    close(output_chan)
-
   }
+
+  close(output_chan)
 }
 
 // Detects difference between Source- and Destination-Bucket
