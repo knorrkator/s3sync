@@ -54,7 +54,7 @@ func receive_s3_chunks(svc *s3.S3, bucket_name string, chan_s3_chunks chan *s3.L
   //fmt.Printf("%s done\n", bucket_name)
 }
 
-// Need to convert Chungs of Keys, returned from S3-API into lists
+// Need to convert Chunks of Keys from S3-API into a single list of Keys
 func extract_contents(chan_s3_chunks chan *s3.ListObjectsOutput, output_chan chan *s3.Object) {
   defer wg_list.Done()
   for {
