@@ -6,6 +6,7 @@ import (
     "os"
     "net"
     "net/url"
+    "strconv"
 
     // Api-Calls to AWS
     "github.com/aws/aws-sdk-go/aws"
@@ -24,7 +25,7 @@ const (
   // How many S3-Result-Sets are buffered until the producer blocks
   CHAN_BUFFER_SIZE = 1000
   // How many worker processes should do actual sync from Source-Bucket to Destination-Bucket
-  CHAN_UPLOAD_WORKER = 5
+  DEFAULT_WORKER_COUNT = 5
 )
 
 var wg_list sync.WaitGroup
@@ -188,6 +189,7 @@ var (
   // Define Command-Line-Args
   arg_bucket_src = kingpin.Arg("source-bucket", "S3-Path of Source-Bucket. Must begin with s3://").Required().String()
   arg_bucket_dest = kingpin.Arg("destination-bucket", "S3-Path Destination-Bucket. Must begin with s3://").Required().String()
+  arg_worker_count = kingpin.Flag("worker-count", "How many Worker-Processes to spawn. This only applys to those processes that do the sync from Source- to Destination-Bucket.").Default(strconv.Itoa(DEFAULT_WORKER_COUNT)).Int()
 )
 
 func main() {
@@ -233,7 +235,7 @@ func main() {
     // List that contains a list of S3-Keys
     s3_contents_dest := make(chan *s3.Object, CHAN_BUFFER_SIZE)
     // List that contains a list of S3-Keys that are missing in Destination => need upload to Destination
-    s3_contents_4_upload := make(chan *s3.Object, CHAN_UPLOAD_WORKER)
+    s3_contents_4_upload := make(chan *s3.Object, *arg_worker_count)
 
     // Task 1: Read Chunks from S3-Buckets.
     // Chunks are a bunch of S3-Keys that the Bucket contains. A S3-Bucket retuns
@@ -254,8 +256,8 @@ func main() {
     wg_list.Add(1)
 
     // Upload files that are missing on Destination-Bucket
-    fmt.Printf("Worker-Count: %v\n", CHAN_UPLOAD_WORKER)
-    for i := 0; i < CHAN_UPLOAD_WORKER; i++ {
+    fmt.Printf("Worker-Count: %v\n", *arg_worker_count)
+    for i := 0; i < *arg_worker_count; i++ {
       fmt.Printf("Starting Worker %v\n", i)
       wg_upload.Add(1)
       go sync_s3_elements(svc, host_src, host_dest, s3_contents_4_upload, i)
