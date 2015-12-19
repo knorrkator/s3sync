@@ -199,6 +199,7 @@ func main() {
         panic(err)
     }
 
+    // Needing S3-Path as parameter accordingly to AWS-CLI
     if(s3_url_src.Scheme != "s3") {
       fmt.Printf("S3-Path (Source-Bucket) must begin with s3://\n")
       os.Exit(1)
@@ -209,6 +210,7 @@ func main() {
         panic(err)
     }
 
+    // Needing S3-Path as parameter accordingly to AWS-CLI
     if(s3_url_dest.Scheme != "s3") {
       fmt.Printf("S3-Paths (Destination-Bucket)   must begin with s3://\n")
       os.Exit(1)
