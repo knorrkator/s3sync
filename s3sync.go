@@ -3,10 +3,9 @@ package main
 import (
     "fmt"
     "sync"
-    "os"
-    "net"
     "net/url"
     "strconv"
+    "errors"
 
     // Api-Calls to AWS
     "github.com/aws/aws-sdk-go/aws"
@@ -26,10 +25,27 @@ const (
   CHAN_BUFFER_SIZE = 1000
   // How many worker processes should do actual sync from Source-Bucket to Destination-Bucket
   DEFAULT_WORKER_COUNT = 5
+  // Default AWS-Region if not set
+  DEFAULT_AWS_REGION = "us-west-1"
 )
 
 var wg_list sync.WaitGroup
 var wg_upload sync.WaitGroup
+
+// Extracts Bucket-Name from S3-Path. Also checks if it's an valid S3-Path (s3://$BUCKET_NAME)
+func get_bucketname_from_s3_path(s3_path string) (hostname string, err error) {
+  s3_url, err := url.Parse(s3_path)
+  if err != nil {
+      return "", err
+  }
+
+  // Needing S3-Path as parameter accordingly to AWS-CLI
+  if(s3_url.Scheme != "s3") {
+    return "", errors.New("S3-Path must begin with s3://")
+  }
+
+  return s3_url.Host, nil
+}
 
 // Finds every element in a S3-Bucket
 // Is meant to run in parallel. Puts resultsets into channel *s3.ListObjectsOutput
@@ -172,6 +188,7 @@ func sync_s3_elements(svc *s3.S3, bucket_name_src, bucket_name_dest string, s3_c
       if err != nil {
       	// Print the error, cast err to awserr.Error to get the Code and
       	// Message from an error.
+        fmt.Printf("Error when copying s3://%v/%v to s3://%v/%v\n", bucket_name_src, *elem.Key, bucket_name_dest, *elem.Key)
       	fmt.Println(err.Error())
       	return
       }
@@ -190,41 +207,30 @@ var (
   arg_bucket_src = kingpin.Arg("source-bucket", "S3-Path of Source-Bucket. Must begin with s3://").Required().String()
   arg_bucket_dest = kingpin.Arg("destination-bucket", "S3-Path Destination-Bucket. Must begin with s3://").Required().String()
   arg_worker_count = kingpin.Flag("worker-count", "How many Worker-Processes to spawn. This only applys to those processes that do the sync from Source- to Destination-Bucket.").Default(strconv.Itoa(DEFAULT_WORKER_COUNT)).Int()
+  arg_aws_region = kingpin.Flag("region", "The AWS-Region. Like us-west-1 or eu-west-1. Defaults to us-west-1").Default(DEFAULT_AWS_REGION).String()
 )
 
 func main() {
     // Init Command-Line-Arg-Parser
     kingpin.Parse()
 
-    s3_url_src, err := url.Parse(*arg_bucket_src)
+    host_src, err := get_bucketname_from_s3_path(*arg_bucket_src)
     if err != nil {
-        panic(err)
+      fmt.Println("Wrong S3-Path on Source-Bucket")
+      panic(err)
     }
 
-    // Needing S3-Path as parameter accordingly to AWS-CLI
-    if(s3_url_src.Scheme != "s3") {
-      fmt.Printf("S3-Path (Source-Bucket) must begin with s3://\n")
-      os.Exit(1)
-    }
-
-    s3_url_dest, err := url.Parse(*arg_bucket_dest)
+    host_dest, err := get_bucketname_from_s3_path(*arg_bucket_dest)
     if err != nil {
-        panic(err)
+      fmt.Println("Wrong S3-Path on Destination-Bucket")
+      panic(err)
     }
-
-    // Needing S3-Path as parameter accordingly to AWS-CLI
-    if(s3_url_dest.Scheme != "s3") {
-      fmt.Printf("S3-Paths (Destination-Bucket)   must begin with s3://\n")
-      os.Exit(1)
-    }
-
-    host_src, _, _ := net.SplitHostPort(s3_url_src.Host)
-    host_dest, _, _ := net.SplitHostPort(s3_url_dest.Host)
 
     // Create an S3 service object in the "eu-west-1" region
     // Note that you can also configure your region globally by
     // exporting the AWS_REGION environment variable
-    svc := s3.New(session.New(), &aws.Config{Region: aws.String("eu-west-1")})
+    aws_region := aws.String(*arg_aws_region)
+    svc := s3.New(session.New(), &aws.Config{Region: aws_region})
 
     // Channel that contains a list of S3-Chunks
     chan_s3_chunks_src := make(chan *s3.ListObjectsOutput, CHAN_BUFFER_SIZE)
