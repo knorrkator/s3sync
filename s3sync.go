@@ -3,11 +3,14 @@ package main
 import (
     "fmt"
     "sync"
-    "os"
 
+    // Api-Calls to AWS
     "github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/session"
     "github.com/aws/aws-sdk-go/service/s3"
+
+    // Parse Command-Line-Args
+    "gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -178,10 +181,15 @@ func sync_s3_elements(svc *s3.S3, bucket_name_src, bucket_name_dest string, s3_c
   fmt.Printf("Sync done\n")
 }
 
-func main() {
+var (
+  // Define Command-Line-Args
+  arg_bucket_src = kingpin.Arg("source-bucket", "S3-Path of Source-Bucket. Must begin with s3://").Required().String()
+  arg_bucket_dest = kingpin.Arg("destination-bucket", "S3-Path Destination-Bucket. Must begin with s3://").Required().String()
+)
 
-    bucket_name_src := os.Args[1]
-    bucket_name_dest := os.Args[2]
+func main() {
+    // Init Command-Line-Arg-Parser
+    kingpin.Parse()
 
     // Create an S3 service object in the "eu-west-1" region
     // Note that you can also configure your region globally by
@@ -202,9 +210,9 @@ func main() {
     // Task 1: Read Chunks from S3-Buckets.
     // Chunks are a bunch of S3-Keys that the Bucket contains. A S3-Bucket retuns
     // a maximum of 1.000 keys per Chunk. Both Buckets are read asyncroneuous.
-    go receive_s3_chunks(svc, bucket_name_src, chan_s3_chunks_src)
+    go receive_s3_chunks(svc, *arg_bucket_src, chan_s3_chunks_src)
     wg_list.Add(1)
-    go receive_s3_chunks(svc, bucket_name_dest, chan_s3_chunks_dest)
+    go receive_s3_chunks(svc, *arg_bucket_dest, chan_s3_chunks_dest)
     wg_list.Add(1)
     // When the first Chunks arrive we extract their keys and write them into a list.
     // Both Buckets have their own list of S3-Keys
@@ -222,7 +230,7 @@ func main() {
     for i := 0; i < CHAN_UPLOAD_WORKER; i++ {
       fmt.Printf("Starting Worker %v\n", i)
       wg_upload.Add(1)
-      go sync_s3_elements(svc, bucket_name_src, bucket_name_dest, s3_contents_4_upload, i)
+      go sync_s3_elements(svc, *arg_bucket_src, *arg_bucket_dest, s3_contents_4_upload, i)
     }
 
     wg_list.Wait()
